@@ -80,6 +80,20 @@ class UsersService {
     return id;
   }
 
+  async verifyUserExist(userId) {
+    const query = {
+      text: 'SELECT id FROM users WHERE id = $1',
+      values: [userId],
+    };
+    const result = await this._pool.query(query);
+
+    if (!result.rows.length) {
+      throw new NotFoundError('User tidak ditemukan');
+    }
+
+    return result.rows[0].id;
+  }
+
   async getUsersByUsername(username) {
     const query = {
       text: 'SELECT id, username, fullname FROM users WHERE username LIKE $1',

@@ -6,8 +6,9 @@ const AuthorizationError = require('../../exceptions/AuthorizationError');
 const { mapDBToModelPlaylist, mapDBToModelAllSongs } = require('../../utils');
 
 class PlaylistsService {
-  constructor() {
+  constructor(collaborationService) {
     this._pool = new Pool();
+    this._collaborationService = collaborationService;
   }
 
   async addPlaylist({ name, owner }) {
@@ -29,17 +30,26 @@ class PlaylistsService {
     return result.rows[0].id;
   }
 
-  async getPlaylists(owner = null) {
-    // const query = {
-    //   text: 'SELECT * FROM playlists WHERE owner = $1',
-    //   values: [owner],
-    // };
+  async getPlaylists(owner) {
+    const query = {
+      text: `SELECT playlists.*, users.username FROM playlists
+      JOIN users ON users.id = playlists.owner
+      LEFT JOIN collaborations ON collaborations.playlist_id = playlists.id
+      WHERE playlists.owner = $1 OR collaborations.user_id = $1
+      GROUP BY playlists.id, users.username`,
+      values: [owner],
+    };
 
-    // const result = await this._pool.query(query);
+    let result;
+    try {
+      result = await this._pool.query(query);
+    } catch (error) {
+      console.log(error);
+    }
     // return result.rows;
-    const result = await this._pool.query(
-      'SELECT playlists.*, users.username FROM playlists JOIN users ON users.id = playlists.owner;'
-    );
+    // const result = await this._pool.query(
+    //   'SELECT playlists.*, users.username FROM playlists JOIN users ON users.id = playlists.owner;'
+    // );
     return result.rows.map(mapDBToModelPlaylist);
   }
 
@@ -48,14 +58,7 @@ class PlaylistsService {
       text: 'SELECT playlists.*, users.username FROM playlists JOIN users ON users.id = playlists.owner WHERE playlists.id = $1',
       values: [playlistId],
     };
-    console.log(query);
     const result = await this._pool.query(query);
-    console.log(result.rows);
-    // try {
-    // } catch (error) {
-    //   console.log(error.message);
-    // }
-    console.log(result.rows.map(mapDBToModelPlaylist)[0]);
     return result.rows.map(mapDBToModelPlaylist)[0];
   }
 
@@ -77,19 +80,12 @@ class PlaylistsService {
     const createdAt = new Date().toISOString();
     const updatedAt = createdAt;
 
-    console.log(id, playlistId, songId, createdAt, updatedAt);
-
     const query = {
       text: 'INSERT INTO playlist_songs VALUES($1, $2, $3, $4, $5) RETURNING id',
       values: [id, playlistId, songId, createdAt, updatedAt],
     };
 
-    console.log(query);
     const result = await this._pool.query(query);
-    // try {
-    // } catch (error) {
-    //   console.log(error.message);
-    // }
 
     if (!result.rows[0].id) {
       throw new InvariantError('Song gagal ditambahkan ke Playlist');
@@ -147,6 +143,49 @@ class PlaylistsService {
     if (!result.rows.length) {
       throw new NotFoundError('Song tidak ditemukan');
     }
+  }
+
+  async verifyPlaylistAccess(playlistId, userId) {
+    try {
+      await this.verifyPlaylistOwner(playlistId, userId);
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        throw error;
+      }
+      try {
+        await this._collaborationService.verifyCollaborator(playlistId, userId);
+      } catch {
+        throw error;
+      }
+    }
+  }
+
+  async addActivity({ playlistId, songId, userId, action }) {
+    const id = nanoid(16);
+    const time = new Date().toISOString();
+
+    const query = {
+      text: 'INSERT INTO playlist_song_activities VALUES($1, $2, $3, $4, $5, $6) RETURNING id',
+      values: [id, playlistId, songId, userId, action, time],
+    };
+
+    const result = await this._pool.query(query);
+
+    if (!result.rows[0].id) {
+      throw new InvariantError('Activity gagal ditambahkan');
+    }
+
+    return result.rows[0].id;
+  }
+
+  async getActivitiesByPlaylistId(playlistId) {
+    const query = {
+      text: 'SELECT users.username, songs.title, playlist_song_activities.action, playlist_song_activities.time FROM playlist_song_activities JOIN users ON users.id = playlist_song_activities.user_id JOIN songs ON songs.id = playlist_song_activities.song_id WHERE playlist_song_activities.playlist_id = $1;',
+      values: [playlistId],
+    };
+    const result = await this._pool.query(query);
+
+    return result.rows;
   }
 }
 
