@@ -46,10 +46,7 @@ class PlaylistsService {
     } catch (error) {
       console.log(error);
     }
-    // return result.rows;
-    // const result = await this._pool.query(
-    //   'SELECT playlists.*, users.username FROM playlists JOIN users ON users.id = playlists.owner;'
-    // );
+
     return result.rows.map(mapDBToModelPlaylist);
   }
 

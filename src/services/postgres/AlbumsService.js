@@ -50,10 +50,6 @@ class AlbumsService {
     };
     const resultSongs = await this._pool.query(querySongs);
 
-    // if (!result.rows.length) {
-    //   throw new NotFoundError('Album tidak ditemukan');
-    // }
-
     const album = result.rows.map(mapDBToModelAlbum)[0];
     const songs = resultSongs.rows.map(mapDBToModelAllSongs);
 
