@@ -61,7 +61,7 @@ class PlaylistsService {
       throw new NotFoundError('Playlist tidak ditemukan');
     }
 
-    return result.rows.map(mapDBToModelPlaylist)[0];
+    return mapDBToModelPlaylist(result.rows[0]);
   }
 
   async deletePlaylistById(id) {
@@ -72,7 +72,7 @@ class PlaylistsService {
 
     const result = await this._pool.query(query);
 
-    if (!result.rows.length) {
+    if (!result.rowCount) {
       throw new NotFoundError('Playlist gagal dihapus. Id tidak ditemukan');
     }
   }
