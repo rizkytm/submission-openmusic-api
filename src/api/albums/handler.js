@@ -1,5 +1,11 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 const autoBind = require('auto-bind');
+const path = require('path');
+
+const StorageService = require('../../services/storage/StorageService');
+const UploadsValidator = require('../../validator/uploads');
+
+const ClientError = require('../../exceptions/ClientError');
 
 class AlbumsHandler {
   constructor(service, validator) {
@@ -20,6 +26,42 @@ class AlbumsHandler {
       message: 'Album berhasil ditambahkan',
       data: {
         albumId,
+      },
+    });
+    response.code(201);
+    return response;
+  }
+
+  async postUploadCoverHandler(request, h) {
+    const { cover } = request.payload;
+    const { id } = request.params;
+    try {
+      UploadsValidator.validateAlbumCover(cover.hapi.headers);
+    } catch (error) {
+      if (error instanceof ClientError) {
+        const response = h.response({
+          status: 'fail',
+          message: error.message,
+        });
+        response.code(error.statusCode);
+        return response;
+      }
+    }
+
+    const storageService = new StorageService(
+      path.resolve(__dirname, './covers')
+    );
+    const filename = await storageService.writeFile(cover, cover.hapi);
+
+    const fileLocation = `http://${process.env.HOST}:${process.env.PORT}/upload/covers/${filename}`;
+
+    await this._service.editAlbumCoverById(id, fileLocation);
+
+    const response = h.response({
+      status: 'success',
+      message: 'Cover berhasil diupload',
+      data: {
+        fileLocation,
       },
     });
     response.code(201);
